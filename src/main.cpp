@@ -66,21 +66,40 @@ int main(int argc, char** argv) {
     memset(&status_to_send, 0, sizeof(status_to_send));
     
     std::vector<int> clients;
+    int failure_count = 0;
 
     while (g_running) {
         /* 1. Fetch data from BMS (This acts as the heartbeat) */
         tws_bms::BatteryStatus raw_data;
-        if (bms_proto.read_basic_info(raw_data) && bms_proto.read_capacity_info(raw_data)) {
+        bool ok_basic = bms_proto.read_basic_info(raw_data);
+        usleep(50000); // Wait 50ms between requests to avoid bus congestion
+        bool ok_capacity = bms_proto.read_capacity_info(raw_data);
+
+        if (ok_basic || ok_capacity) {
+            failure_count = 0; // Reset failure counter on any successful read
             
-            /* 2. Map raw data to shared POD structure */
-            status_to_send.voltage = raw_data.voltage;
-            status_to_send.current = raw_data.current;
-            status_to_send.temperature = raw_data.temperature;
-            status_to_send.percentage = raw_data.percentage;
-            status_to_send.charge = raw_data.charge;
-            status_to_send.capacity = raw_data.capacity;
-            status_to_send.protect_status = raw_data.protect_status;
-            status_to_send.work_state = raw_data.work_state;
+            /* 2. Map raw data to shared POD structure (Partial update is better than no update) */
+            if (ok_basic) {
+                status_to_send.voltage = raw_data.voltage;
+                status_to_send.current = raw_data.current;
+                status_to_send.temperature = raw_data.temperature;
+                status_to_send.protect_status = raw_data.protect_status;
+                status_to_send.work_state = raw_data.work_state;
+                status_to_send.max_cell_voltage = raw_data.max_cell_voltage;
+                status_to_send.min_cell_voltage = raw_data.min_cell_voltage;
+            }
+            if (ok_capacity) {
+                status_to_send.percentage = raw_data.percentage;
+                status_to_send.charge = raw_data.charge;
+                status_to_send.capacity = raw_data.capacity;
+                status_to_send.soh = raw_data.soh;
+            }
+
+            // --- 增加调试打印 ---
+            std::cout << "[BMS Data] Voltage: " << status_to_send.voltage << "V | "
+                      << "Current: " << status_to_send.current << "A | "
+                      << "SoC: " << status_to_send.percentage * 100.0 << "%" << std::endl;
+            // ------------------
             
             /* 3. Broadcast to all connected clients */
             for (auto it = clients.begin(); it != clients.end(); ) {
@@ -91,24 +110,30 @@ int main(int argc, char** argv) {
                     ++it;
                 }
             }
-
-            /* 4. Accept new client connections (Non-blocking) */
-            struct timeval tv = {0, 10000}; /* 10ms timeout */
-            fd_set rfds;
-            FD_ZERO(&rfds);
-            FD_SET(server_fd, &rfds);
-            if (select(server_fd + 1, &rfds, NULL, NULL, &tv) > 0) {
-                int cfd = accept(server_fd, NULL, NULL);
-                if (cfd >= 0) {
-                    clients.push_back(cfd);
-                    std::cout << "[BMS Daemon] New client connected." << std::endl;
-                }
-            }
         } else {
-            std::cerr << "[BMS Daemon] BMS Read Failure. Port may be disconnected." << std::endl;
-            bms_proto.close_port();
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            bms_proto.open();
+            failure_count++;
+            std::cerr << "[BMS Daemon] BMS Read Failure (" << failure_count << "/5)" << std::endl;
+            
+            if (failure_count >= 5) {
+                std::cerr << "[BMS Daemon] Port seems disconnected. Re-opening..." << std::endl;
+                bms_proto.close_port();
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                bms_proto.open();
+                failure_count = 0;
+            }
+        }
+
+        /* 4. Accept new client connections (Non-blocking) */
+        struct timeval tv = {0, 10000}; /* 10ms timeout */
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(server_fd, &rfds);
+        if (select(server_fd + 1, &rfds, NULL, NULL, &tv) > 0) {
+            int cfd = accept(server_fd, NULL, NULL);
+            if (cfd >= 0) {
+                clients.push_back(cfd);
+                std::cout << "[BMS Daemon] New client connected." << std::endl;
+            }
         }
         
         /* Loop frequency ~1Hz */

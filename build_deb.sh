@@ -1,14 +1,30 @@
 #!/bin/bash
-# One-click Debian package builder for bms-daemon
+# Decoupled & Cross-compile ready Debian package builder
 
 PACKAGE_NAME="bms-daemon"
-VERSION="1.0.0"
-ARCH=$(dpkg --print-architecture)
+VERSION="1.1.0"
+
+# 1. Determine Architecture (Allow override for cross-compiling)
+if [ -z "$ARCH" ]; then
+    ARCH=$(dpkg --print-architecture)
+fi
+
 DEB_DIR="${PACKAGE_NAME}_${VERSION}_${ARCH}"
 
+# 2. Setup Compilers (Allow override via CROSS_PREFIX)
+# Example: CROSS_PREFIX=aarch64-linux-gnu- ./build_deb.sh
+if [ -n "$CROSS_PREFIX" ]; then
+    CC="${CROSS_PREFIX}gcc"
+    CXX="${CROSS_PREFIX}g++"
+    CMAKE_OPTS="-DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=$ARCH"
+    echo ">>> Cross-compiling for $ARCH using $CXX"
+else
+    echo ">>> Compiling natively for $ARCH"
+fi
+
 echo ">>> Starting compilation..."
-mkdir -p build && cd build
-cmake .. && make -j$(nproc)
+rm -rf build && mkdir -p build && cd build
+cmake .. $CMAKE_OPTS && make -j$(nproc)
 if [ $? -ne 0 ]; then
     echo "Error: Compilation failed!"
     exit 1
@@ -20,54 +36,30 @@ rm -rf ${DEB_DIR}
 mkdir -p ${DEB_DIR}/DEBIAN
 mkdir -p ${DEB_DIR}/usr/bin
 mkdir -p ${DEB_DIR}/etc/systemd/system
+mkdir -p ${DEB_DIR}/etc/default
 
-# Copy binary to install directory
+# Copy Binary and templates
 cp build/bms_daemon ${DEB_DIR}/usr/bin/
+cp debian/bms.service ${DEB_DIR}/etc/systemd/system/
+cp debian/bms_daemon.default ${DEB_DIR}/etc/default/bms_daemon
 
-# Create Debian Control File
-cat <<EOF > ${DEB_DIR}/DEBIAN/control
-Package: ${PACKAGE_NAME}
-Version: ${VERSION}
-Section: base
-Priority: optional
-Architecture: ${ARCH}
-Maintainer: Robot Admin <admin@robot.com>
-Description: BMS Heartbeat Daemon to prevent auto power-off.
- Provides a Unix Domain Socket (/tmp/bms.sock) for clients.
-EOF
-
-# Create Systemd Service File
-cat <<EOF > ${DEB_DIR}/etc/systemd/system/bms.service
-[Unit]
-Description=BMS Heartbeat Daemon
-After=network.target
-
-[Service]
-ExecStart=/usr/bin/bms_daemon /dev/ttyUSB0
-Restart=always
-RestartSec=3
-User=root
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Create Post-installation Script (Enables and starts service after install)
-cat <<EOF > ${DEB_DIR}/DEBIAN/postinst
-#!/bin/bash
-systemctl daemon-reload
-systemctl enable bms.service
-systemctl start bms.service
-EOF
+# Copy DEBIAN maintainer scripts
+cp debian/postinst ${DEB_DIR}/DEBIAN/
+cp debian/prerm ${DEB_DIR}/DEBIAN/
+cp debian/conffiles ${DEB_DIR}/DEBIAN/
 chmod 755 ${DEB_DIR}/DEBIAN/postinst
+chmod 755 ${DEB_DIR}/DEBIAN/prerm
 
-# Execute Packaging
+# Generate Control file (Replace architecture placeholder)
+sed "s/ARCH_PLACEHOLDER/${ARCH}/g" debian/control > ${DEB_DIR}/DEBIAN/control
+
+# 5. Build Package
 echo ">>> Executing dpkg-deb build..."
-dpkg-deb --build ${DEB_DIR}
+# Use --root-owner-group to ensure correct permissions if building as non-root
+dpkg-deb --root-owner-group --build ${DEB_DIR}
 
 if [ $? -eq 0 ]; then
     echo ">>> Success! Generated ${DEB_DIR}.deb"
-    echo ">>> You can install it using: sudo dpkg -i ${DEB_DIR}.deb"
 else
     echo ">>> Error: Packaging failed!"
     exit 1

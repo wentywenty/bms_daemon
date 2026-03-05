@@ -51,6 +51,9 @@ private:
     void send_read_request(uint16_t start_addr, uint16_t num_regs);
     bool read_response(std::vector<uint8_t>& buffer, int expected_bytes);
     
+    uint16_t get_u16(const uint8_t* buf, int offset);
+    uint32_t get_u32(const uint8_t* buf, int offset);
+    int32_t get_i32(const uint8_t* buf, int offset);
     uint16_t get_u16(const std::vector<uint8_t>& buf, int offset);
     uint32_t get_u32(const std::vector<uint8_t>& buf, int offset);
     int32_t get_i32(const std::vector<uint8_t>& buf, int offset);

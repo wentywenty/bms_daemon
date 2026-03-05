@@ -1,0 +1,8 @@
+Package: bms-daemon
+Version: 1.1.0
+Section: base
+Priority: optional
+Architecture: ARCH_PLACEHOLDER
+Maintainer: Robot Admin <admin@robot.com>
+Description: BMS Heartbeat Daemon with serial port config.
+ Provides a Unix Domain Socket (/tmp/bms.sock) for clients.

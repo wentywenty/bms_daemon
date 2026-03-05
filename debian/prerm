@@ -1,0 +1,3 @@
+#!/bin/bash
+systemctl stop bms.service || true
+systemctl disable bms.service || true

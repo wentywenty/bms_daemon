@@ -5,19 +5,20 @@
 #include <cstring>
 #include <iostream>
 #include <poll.h>
+#include <iomanip>
 
 namespace tws_bms {
 
 #define BMS_ADDR 0x01
 #define FUNC_READ 0x03
 #define FUNC_WRITE_SINGLE 0x06
+#define FUNC_WRITE_MULTI 0x10
 #define REG_IO_CONTROL 0x9014
 #define REG_VERSION_SW 0x9026
 #define REG_VERSION_HW 0x9027
 #define REG_SOH 0x9029
 #define REG_CYCLES 0x902C
 
-/* Modbus RTU CRC16 Lookup Tables */
 static const uint8_t aucCRCHi[] = {
     0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
     0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
@@ -72,8 +73,10 @@ bool BmsProtocol::open() {
     options.c_cflag |= (CLOCAL | CREAD | CS8);
     options.c_cflag &= ~(PARENB | CSTOPB | CSIZE);
     options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+    options.c_iflag &= ~(IXON | IXOFF | IXANY); // Disable flow control
     options.c_oflag &= ~OPOST;
     tcsetattr(serial_fd_, TCSANOW, &options);
+    fcntl(serial_fd_, F_SETFL, FNDELAY);
     return true;
 }
 
@@ -99,19 +102,37 @@ void BmsProtocol::send_read_request(uint16_t start_addr, uint16_t num_regs) {
 }
 
 bool BmsProtocol::read_response(std::vector<uint8_t>& buffer, int expected_bytes) {
+    if (serial_fd_ < 0) return false;
     buffer.assign(expected_bytes, 0);
     int total_read = 0;
     struct pollfd pfd = {serial_fd_, POLLIN, 0};
+    
+    // Increased timeout for OrangePi to 300ms
     while (total_read < expected_bytes) {
-        if (poll(&pfd, 1, 150) > 0) {
+        int ret = poll(&pfd, 1, 300);
+        if (ret > 0) {
             int n = read(serial_fd_, buffer.data() + total_read, expected_bytes - total_read);
-            if (n > 0) total_read += n; else break;
-        } else break;
+            if (n > 0) {
+                total_read += n;
+            } else if (n < 0 && errno != EAGAIN) {
+                break;
+            } else {
+                break; // Should not happen with poll
+            }
+        } else {
+            break; // Timeout or error
+        }
     }
+
     if (total_read < 5) return false;
     uint16_t received_crc = buffer[total_read-2] | (buffer[total_read-1] << 8);
     uint16_t calc_crc = calculate_crc(buffer.data(), total_read - 2);
-    if (received_crc != calc_crc) return false;
+    
+    if (received_crc != calc_crc) {
+        // Optional: std::cerr << "[CRC Error] Recv: " << received_crc << " Calc: " << calc_crc << std::endl;
+        return false;
+    }
+    if (buffer[1] & 0x80) return false;
     return (total_read == expected_bytes);
 }
 
@@ -120,25 +141,77 @@ bool BmsProtocol::read_basic_info(BatteryStatus& status) {
     send_read_request(0x9000, 15);
     std::vector<uint8_t> buf;
     if (read_response(buf, 35)) {
+        status.work_state = get_u16(buf, 3);
         status.voltage = get_u32(buf, 7) / 1000.0;
         status.current = get_i32(buf, 11) / 1000.0;
+        status.max_cell_voltage = get_u16(buf, 15) / 1000.0;
+        status.min_cell_voltage = get_u16(buf, 17) / 1000.0;
         status.temperature = static_cast<float>(get_u16(buf, 19)) - 40.0f;
         status.protect_status = get_u32(buf, 27);
-        status.work_state = get_u16(buf, 3);
+        return true;
+    }
+    return false;
+}
+
+bool BmsProtocol::read_version_info(BatteryStatus& status) {
+    tcflush(serial_fd_, TCIOFLUSH);
+    send_read_request(REG_VERSION_SW, 2);
+    std::vector<uint8_t> resp;
+    if (read_response(resp, 9)) {
+        status.sw_version = get_u16(resp, 3);
+        status.hw_version = get_u16(resp, 5);
+        
+        usleep(50000); tcflush(serial_fd_, TCIOFLUSH);
+        send_read_request(REG_SOH, 1);
+        if (read_response(resp, 7)) status.soh = get_u16(resp, 3);
+        
+        usleep(50000); tcflush(serial_fd_, TCIOFLUSH);
+        send_read_request(REG_CYCLES, 2);
+        if (read_response(resp, 9)) status.cycles = get_u32(resp, 3);
+        
         return true;
     }
     return false;
 }
 
 bool BmsProtocol::read_capacity_info(BatteryStatus& status) {
-    send_read_request(0x9028, 4);
+    tcflush(serial_fd_, TCIOFLUSH);
+    send_read_request(0x9028, 4); 
     std::vector<uint8_t> buf;
     if (read_response(buf, 13)) {
-        status.percentage = get_u16(buf, 3) / 100.0;
-        status.charge = get_u32(buf, 7) / 1000.0;
-        return true;
+         status.percentage = get_u16(buf, 3) / 100.0;
+         status.soh = get_u16(buf, 5);
+         status.charge = get_u32(buf, 7) / 1000.0;
+         status.capacity = status.charge / (status.percentage > 0.001 ? status.percentage : 1.0);
+         return true;
     }
     return false;
+}
+
+bool BmsProtocol::read_serial_number(std::string& sn) {
+    tcflush(serial_fd_, TCIOFLUSH);
+    send_read_request(0x9016, 16);
+    std::vector<uint8_t> buf;
+    if (read_response(buf, 37)) {
+        char sn_str[33]; for(int i=0; i<32; i++) sn_str[i] = buf[3+i]; sn_str[32] = '\0';
+        sn = std::string(sn_str); return true;
+    }
+    return false;
+}
+
+bool BmsProtocol::set_discharge_output(bool enable) {
+    uint16_t val = enable ? 0x0003 : 0x0001;
+    tcflush(serial_fd_, TCIOFLUSH);
+    uint8_t f6[8] = {BMS_ADDR, FUNC_WRITE_SINGLE, (uint8_t)(REG_IO_CONTROL >> 8), (uint8_t)REG_IO_CONTROL, (uint8_t)(val >> 8), (uint8_t)val};
+    uint16_t crc = calculate_crc(f6, 6); f6[6] = crc & 0xFF; f6[7] = crc >> 8;
+    write(serial_fd_, f6, 8);
+    std::vector<uint8_t> resp;
+    if (read_response(resp, 8)) return true;
+    usleep(50000); tcflush(serial_fd_, TCIOFLUSH);
+    uint8_t f10[13] = {BMS_ADDR, FUNC_WRITE_MULTI, (uint8_t)(REG_IO_CONTROL >> 8), (uint8_t)REG_IO_CONTROL, 0x00, 0x01, 0x02, (uint8_t)(val >> 8), (uint8_t)val};
+    crc = calculate_crc(f10, 9); f10[9] = crc & 0xFF; f10[10] = crc >> 8;
+    write(serial_fd_, f10, 11);
+    return read_response(resp, 8);
 }
 
 uint16_t BmsProtocol::get_u16(const uint8_t* buf, int offset) { return buf[offset] | (buf[offset+1] << 8); }
