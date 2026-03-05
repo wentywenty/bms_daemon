@@ -2,7 +2,7 @@
 # Decoupled & Cross-compile ready Debian package builder
 
 PACKAGE_NAME="bms-daemon"
-VERSION="1.1.0"
+VERSION="1.1.3"
 
 # 1. Determine Architecture (Allow override for cross-compiling)
 if [ -z "$ARCH" ]; then
@@ -38,14 +38,16 @@ mkdir -p ${DEB_DIR}/usr/bin
 mkdir -p ${DEB_DIR}/etc/systemd/system
 mkdir -p ${DEB_DIR}/etc/default
 mkdir -p ${DEB_DIR}/usr/include/bms
+mkdir -p ${DEB_DIR}/etc/udev/rules.d
 
 # Copy Binary and templates
+cp scripts/bms_ota.py ${DEB_DIR}/usr/bin/
 cp build/bms_daemon ${DEB_DIR}/usr/bin/
 cp include/bms_status.h ${DEB_DIR}/usr/include/bms/
-cp debian/bms.service ${DEB_DIR}/etc/systemd/system/
-cp debian/bms_ota.service ${DEB_DIR}/etc/systemd/system/
-cp debian/bms_daemon.default ${DEB_DIR}/etc/default/bms_daemon
-cp debian/bms_ota.py ${DEB_DIR}/usr/bin/
+cp service/bms.service ${DEB_DIR}/etc/systemd/system/
+cp service/bms_ota.service ${DEB_DIR}/etc/systemd/system/
+cp udev/99-bms.rules ${DEB_DIR}/etc/udev/rules.d/
+cp config/bms_daemon.default ${DEB_DIR}/etc/default/bms_daemon
 
 # Copy DEBIAN maintainer scripts
 cp debian/postinst ${DEB_DIR}/DEBIAN/

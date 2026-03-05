@@ -1,0 +1,15 @@
+[Unit]
+Description=BMS Firmware OTA Update Task
+After=network.target
+# Ensure no interference from daemon during update (handled in script, double check here)
+Conflicts=bms.service
+
+[Service]
+Type=oneshot
+# Default to using /opt/bms/firmware.bin for update
+ExecStart=/usr/bin/python3 /usr/bin/bms_ota.py /etc/default/bms_daemon /opt/bms/firmware.bin
+RemainAfterExit=no
+User=root
+
+[Install]
+WantedBy=multi-user.target

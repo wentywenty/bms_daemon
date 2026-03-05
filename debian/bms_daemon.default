@@ -1,5 +1,0 @@
-# BMS Daemon 串口配置文件
-# 修改 BMS_PORT 为您的实际串口路径 (如 /dev/ttyUSB1)
-BMS_PORT=/dev/ttyUSB0
-BAUD_RATE=115200
-TIMEOUT_MS=300
