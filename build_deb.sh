@@ -37,9 +37,11 @@ mkdir -p ${DEB_DIR}/DEBIAN
 mkdir -p ${DEB_DIR}/usr/bin
 mkdir -p ${DEB_DIR}/etc/systemd/system
 mkdir -p ${DEB_DIR}/etc/default
+mkdir -p ${DEB_DIR}/usr/include/bms
 
 # Copy Binary and templates
 cp build/bms_daemon ${DEB_DIR}/usr/bin/
+cp include/bms_status.h ${DEB_DIR}/usr/include/bms/
 cp debian/bms.service ${DEB_DIR}/etc/systemd/system/
 cp debian/bms_daemon.default ${DEB_DIR}/etc/default/bms_daemon
 
