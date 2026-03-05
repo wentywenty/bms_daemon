@@ -22,14 +22,27 @@ int main(int argc, char** argv) {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    /* Get serial port from argument or use default */
+    /* Get arguments or use defaults */
     std::string port = (argc > 1) ? argv[1] : "/dev/ttyUSB0";
-    tws_bms::BmsProtocol bms_proto(port, 115200);
+    int baud = (argc > 2) ? std::stoi(argv[2]) : 115200;
+    int timeout = (argc > 3) ? std::stoi(argv[3]) : 300;
 
-    /* Keep trying to open the serial port (BMS Heartbeat start) */
+    tws_bms::BmsProtocol bms_proto(port, baud, timeout);
+
+    /* Keep trying to open the serial port */
     while (g_running && !bms_proto.open()) {
-        std::cerr << "[BMS Daemon] Waiting for serial port " << port << "..." << std::endl;
+        std::cerr << "\033[1;33m[BMS Daemon] Waiting for serial port " << port << "...\033[0m" << std::endl;
         std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
+
+    if (!g_running) return 0;
+
+    /* Print Static Info at Startup */
+    tws_bms::BatteryStatus static_info;
+    if (bms_proto.read_version_info(static_info)) {
+        std::cout << "\033[1;32m[BMS Daemon] Connected to BMS.\033[0m" << std::endl;
+        std::cout << " > FW Version: 0x" << std::hex << static_info.sw_version << " | HW Version: 0x" << static_info.hw_version << std::dec << std::endl;
+        std::cout << " > Health (SOH): " << static_info.soh << "% | Cycles: " << static_info.cycles << std::endl;
     }
 
     /* Initialize Unix Domain Socket Server */

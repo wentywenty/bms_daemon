@@ -43,7 +43,9 @@ mkdir -p ${DEB_DIR}/usr/include/bms
 cp build/bms_daemon ${DEB_DIR}/usr/bin/
 cp include/bms_status.h ${DEB_DIR}/usr/include/bms/
 cp debian/bms.service ${DEB_DIR}/etc/systemd/system/
+cp debian/bms_ota.service ${DEB_DIR}/etc/systemd/system/
 cp debian/bms_daemon.default ${DEB_DIR}/etc/default/bms_daemon
+cp debian/bms_ota.py ${DEB_DIR}/usr/bin/
 
 # Copy DEBIAN maintainer scripts
 cp debian/postinst ${DEB_DIR}/DEBIAN/
@@ -51,6 +53,7 @@ cp debian/prerm ${DEB_DIR}/DEBIAN/
 cp debian/conffiles ${DEB_DIR}/DEBIAN/
 chmod 755 ${DEB_DIR}/DEBIAN/postinst
 chmod 755 ${DEB_DIR}/DEBIAN/prerm
+chmod 755 ${DEB_DIR}/usr/bin/bms_ota.py
 
 # Generate Control file (Replace architecture placeholder)
 sed "s/ARCH_PLACEHOLDER/${ARCH}/g" debian/control > ${DEB_DIR}/DEBIAN/control

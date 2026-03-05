@@ -29,7 +29,7 @@ struct BatteryStatus {
 
 class BmsProtocol {
 public:
-    BmsProtocol(const std::string& port_name, int baud_rate);
+    BmsProtocol(const std::string& port_name, int baud_rate, int timeout_ms = 300);
     ~BmsProtocol();
 
     bool open();
@@ -46,6 +46,7 @@ private:
     int serial_fd_;
     std::string port_name_;
     int baud_rate_;
+    int timeout_ms_;
 
     uint16_t calculate_crc(const uint8_t *data, size_t len);
     void send_read_request(uint16_t start_addr, uint16_t num_regs);

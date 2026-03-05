@@ -57,8 +57,8 @@ static const uint8_t aucCRCLo[] = {
     0x44, 0x84, 0x85, 0x45, 0x87, 0x47, 0x46, 0x86, 0x82, 0x42, 0x43, 0x83, 0x41, 0x81, 0x80, 0x40
 };
 
-BmsProtocol::BmsProtocol(const std::string& port_name, int baud_rate)
-    : serial_fd_(-1), port_name_(port_name), baud_rate_(baud_rate) {}
+BmsProtocol::BmsProtocol(const std::string& port_name, int baud_rate, int timeout_ms)
+    : serial_fd_(-1), port_name_(port_name), baud_rate_(baud_rate), timeout_ms_(timeout_ms) {}
 
 BmsProtocol::~BmsProtocol() { close_port(); }
 
@@ -107,9 +107,9 @@ bool BmsProtocol::read_response(std::vector<uint8_t>& buffer, int expected_bytes
     int total_read = 0;
     struct pollfd pfd = {serial_fd_, POLLIN, 0};
     
-    // Increased timeout for OrangePi to 300ms
+    // Using dynamic timeout from constructor
     while (total_read < expected_bytes) {
-        int ret = poll(&pfd, 1, 300);
+        int ret = poll(&pfd, 1, timeout_ms_);
         if (ret > 0) {
             int n = read(serial_fd_, buffer.data() + total_read, expected_bytes - total_read);
             if (n > 0) {
