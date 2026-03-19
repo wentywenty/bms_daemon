@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 # Decoupled & Cross-compile ready Debian package builder
 
 PACKAGE_NAME="bms-daemon"
@@ -23,22 +24,18 @@ else
 fi
 
 echo ">>> Starting compilation..."
-rm -rf build && mkdir -p build && cd build
+rm -rf build && mkdir -p build
+pushd build > /dev/null
 cmake .. $CMAKE_OPTS && make -j$(nproc)
-if [ $? -ne 0 ]; then
-    echo "Error: Compilation failed!"
-    exit 1
-fi
-cd ..
+popd > /dev/null
 
 echo ">>> Preparing Debian package structure..."
-rm -rf ${DEB_DIR}
+rm -rf ${DEB_DIR} ${DEB_DIR}.deb
 mkdir -p ${DEB_DIR}/DEBIAN
 mkdir -p ${DEB_DIR}/usr/bin
 mkdir -p ${DEB_DIR}/etc/systemd/system
 mkdir -p ${DEB_DIR}/etc/default
 mkdir -p ${DEB_DIR}/usr/include/bms
-mkdir -p ${DEB_DIR}/etc/udev/rules.d
 
 # Copy Binary and templates
 cp scripts/bms_ota.py ${DEB_DIR}/usr/bin/
@@ -46,7 +43,6 @@ cp build/bms_daemon ${DEB_DIR}/usr/bin/
 cp include/bms_status.h ${DEB_DIR}/usr/include/bms/
 cp service/bms.service ${DEB_DIR}/etc/systemd/system/
 cp service/bms_ota.service ${DEB_DIR}/etc/systemd/system/
-cp udev/99-bms.rules ${DEB_DIR}/etc/udev/rules.d/
 cp config/bms_daemon.default ${DEB_DIR}/etc/default/bms_daemon
 
 # Copy DEBIAN maintainer scripts
@@ -57,17 +53,14 @@ chmod 755 ${DEB_DIR}/DEBIAN/postinst
 chmod 755 ${DEB_DIR}/DEBIAN/prerm
 chmod 755 ${DEB_DIR}/usr/bin/bms_ota.py
 
-# Generate Control file (Replace architecture placeholder)
-sed "s/ARCH_PLACEHOLDER/${ARCH}/g" debian/control > ${DEB_DIR}/DEBIAN/control
+# Generate Control file (Replace placeholders)
+sed -e "s/ARCH_PLACEHOLDER/${ARCH}/g" \
+    -e "s/VERSION_PLACEHOLDER/${VERSION}/g" \
+    debian/control > ${DEB_DIR}/DEBIAN/control
 
 # 5. Build Package
 echo ">>> Executing dpkg-deb build..."
 # Use --root-owner-group to ensure correct permissions if building as non-root
 dpkg-deb --root-owner-group --build ${DEB_DIR}
 
-if [ $? -eq 0 ]; then
-    echo ">>> Success! Generated ${DEB_DIR}.deb"
-else
-    echo ">>> Error: Packaging failed!"
-    exit 1
-fi
+echo ">>> Success! Generated ${DEB_DIR}.deb"

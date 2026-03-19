@@ -1,4 +1,4 @@
 #!/bin/bash
 systemctl daemon-reload
 systemctl enable bms.service
-systemctl restart bms.service || true
+systemctl start bms.service || true
