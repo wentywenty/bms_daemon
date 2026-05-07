@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
-project(roboto_bms)
+
+# 版本号与 debian/changelog 保持一致
+project(roboto_bms VERSION 1.2.0)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 if(NOT CMAKE_CROSSCOMPILING)
@@ -13,7 +15,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_BUILD_TYPE Release)
 
-find_package(ament_cmake QUIET)
 find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
@@ -52,13 +53,37 @@ install(DIRECTORY include/ DESTINATION include)
 install(TARGETS bms_daemon DESTINATION bin)
 
 install(TARGETS bms tws_bms
+    EXPORT roboto_bms-targets
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include
 )
 
-# Install our custom Config for non-ROS consumers (Deb mode)
-install(FILES cmake/roboto_bmsConfig.cmake
+install(EXPORT roboto_bms-targets
+  FILE roboto_bmsTargets.cmake
+  NAMESPACE roboto_bms::
+  DESTINATION lib/cmake/roboto_bms
+)
+
+include(CMakePackageConfigHelpers)
+
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/roboto_bmsConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+
+configure_package_config_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/roboto_bmsConfig.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/roboto_bmsConfig.cmake"
+  INSTALL_DESTINATION lib/cmake/roboto_bms
+)
+
+# Install auto-generated Config for non-ROS consumers (Deb mode)
+install(FILES 
+  "${CMAKE_CURRENT_BINARY_DIR}/roboto_bmsConfig.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/roboto_bmsConfigVersion.cmake"
   DESTINATION lib/cmake/roboto_bms
 )
 
@@ -69,8 +94,3 @@ install(TARGETS bms_py
     RUNTIME DESTINATION ${PYTHON_INSTALL_DIR}
 )
 
-if(ament_cmake_FOUND)
-  ament_export_libraries(bms tws_bms)
-  ament_export_include_directories(include)
-  ament_package()
-endif()
