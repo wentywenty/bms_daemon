@@ -1,21 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: encoding -*-
 
+# SPDX-License-Identifier: GPL-3.0
 # Copyright (C) 2026 wentywenty
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, version 3 of the License.
-# version 3 of the License.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 import sys
 import os
 import time
@@ -64,38 +51,38 @@ class BmsOta:
 
     def run(self):
         if not os.path.exists(self.bin_path):
-            self.log(f"错误: 找不到固件文件 {self.bin_path}", "\033[1;31m")
+            self.log(f"Error: firmware file not found {self.bin_path}", "\033[1;31m")
             return False
 
         with open(self.bin_path, "rb") as f:
             self.bin_data = f.read()
         
-        self.log(f"开始升级固件: {self.bin_path} ({len(self.bin_data)} 字节)")
+        self.log(f"Starting firmware upgrade: {self.bin_path} ({len(self.bin_data)} bytes)")
 
         try:
             self.ser = serial.Serial(self.port, 115200, timeout=1)
             
-            self.log("步骤 1: 发送升级请求...")
+            self.log("Step 1: Sending upgrade request...")
             req_data = b'\x30' * 6
             self.send_frame(0x11, req_data)
             resp = self.read_response()
             if not resp or resp[0] != 0x00:
-                self.log(f"请求被拒绝: 状态码 0x{resp[0] if resp else 'NULL':02X}", "\033[1;31m")
+                self.log(f"Request rejected: status code 0x{resp[0] if resp else 'NULL':02X}", "\033[1;31m")
                 return False
 
-            self.log("步骤 2: 发送固件元数据...")
+            self.log("Step 1: Sending firmware hex...")
             meta_data = self.bin_data[:22]
             self.send_frame(0x12, meta_data)
             resp = self.read_response()
             if not resp or resp[0] not in [0x08, 0x06]:
-                self.log("元数据校验失败", "\033[1;31m")
+                self.log("Metadata verification failed", "\033[1;31m")
                 return False
             
             packet_size_code = resp[1]
             chunk_size = {1:64, 2:128, 3:240, 4:512, 5:1024}.get(packet_size_code, 512)
-            self.log(f"BMS 请求分包大小: {chunk_size} 字节")
+            self.log(f"BMS requested chunk size: {chunk_size} bytes")
 
-            self.log("步骤 3: 正在传输数据块...")
+            self.log("Step 3: Transferring data blocks...")
             total_size = len(self.bin_data)
             offset = 0
             pkt_idx = 0
@@ -112,18 +99,18 @@ class BmsOta:
                 self.send_frame(0x13, header_info + chunk)
                 resp = self.read_response(timeout=3.0)
                 if not resp or resp[0] != 0x02:
-                    self.log(f"包 {pkt_idx} 写入失败, 重试中...", "\033[1;33m")
+                    self.log(f"Packet {pkt_idx} write failed, retrying...", "\033[1;33m")
                     time.sleep(0.5)
                     continue
                 
                 offset += actual_len
                 pkt_idx += 1
                 progress = (offset / total_size) * 100
-                sys.stdout.write(f"\r进度: [{pkt_idx}] {progress:.1f}%")
+                sys.stdout.write(f"\rProgress: [{pkt_idx}] {progress:.1f}%")
                 sys.stdout.flush()
 
             sys.stdout.write("\n")
-            self.log("升级完成！等待 BMS 复位...", "\033[1;32m")
+            self.log("Upgrade complete! Waiting for BMS reset...", "\033[1;32m")
             time.sleep(5)
             return True
 

@@ -1,17 +1,11 @@
-/*
- * Copyright (C) 2026 wentywenty
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, version 3 of the License.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+// SPDX-License-Identifier: GPL-3.0
+// Copyright (C) 2026 wentywenty
+
+/**
+ * @file bms_daemon.cpp
+ * @brief BMS daemon process that bridges serial Modbus BMS to a Unix domain socket.
+ * @details Connects to the TWS BMS over serial port, continuously polls battery status,
+ *          and exposes data via a Unix domain socket for client processes.
  */
  
 #include <iostream>
@@ -135,7 +129,6 @@ int main(int argc, char** argv) {
                 status_to_send.soh = raw_data.soh;
             }
 
-            // --- 增加调试打印 ---
             std::cout << "[BMS Data] Voltage: " << status_to_send.voltage << "V | "
                       << "Current: " << status_to_send.current << "A | "
                       << "SoC: " << status_to_send.percentage * 100.0 << "%" << std::endl;
