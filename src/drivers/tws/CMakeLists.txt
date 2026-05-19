@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 wentywenty
 # TWS BMS Modbus protocol (used by daemon)
 add_library(tws_bms_protocol STATIC
     protocol.cpp

@@ -1,7 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0
+# Copyright (C) 2026 wentywenty
+
 cmake_minimum_required(VERSION 3.12)
 
-# 版本号与 debian/changelog 保持一致
-project(roboto_bms VERSION 1.2.0)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/debian/changelog" _changelog_first_line LIMIT_COUNT 1)
+string(REGEX MATCH "\\(([0-9]+\\.[0-9]+\\.[0-9]+)" _ "${_changelog_first_line}")
+set(ROBOTO_BMS_VERSION "${CMAKE_MATCH_1}")
+
+project(roboto_bms VERSION ${ROBOTO_BMS_VERSION})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 if(NOT CMAKE_CROSSCOMPILING)
